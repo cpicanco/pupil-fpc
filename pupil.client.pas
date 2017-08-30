@@ -260,7 +260,7 @@ var
 begin
   PupilMessage.Topic := AMultipartMessage.MsgTopic;
   {$ifdef DEBUG}
-    WriteLn('[debug]', #32, MPMessage.Topic)
+    WriteLn('[debug]', #32, PupilMessage.Topic)
   {$endif};
 
   AMultipartMessage.MsgPackage.Position := 0;
