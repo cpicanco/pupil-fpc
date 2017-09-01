@@ -2,10 +2,6 @@
 
 Free pascal requester and subscriber clients for [pupil](https://github.com/pupil-labs/pupil).
 
-## On ZMQ
-
-The implementation uses pure ZMQ (no czmq) just to keep it simple. For simple req-rep, sub-pub and multipart messaging we don't need czmq.
-
 ## Dependencies
 
 - libzmq as in 2017-08-30 master.
@@ -13,15 +9,19 @@ The implementation uses pure ZMQ (no czmq) just to keep it simple. For simple re
 
 For details, please see: https://github.com/cpicanco/pupil-fpc-examples
 
+## About ZMQ
+
+The implementation uses pure ZMQ (no czmq) just to keep it simple. For simple req-rep, sub-pub and multipart messaging we don't need czmq.
+
 ## Examples
 
 Stand alone examples can be found here: https://github.com/cpicanco/pupil-fpc-examples
 
 ## Pupil Client for TApplication
 
-The class `TPupilClient` (`pupil.client.pas`) can send any request to pupil, react to pupil replyes. You can also subscribe to pupil notifications and messages define in-app events to them.
+The class `TPupilClient` (`pupil.client.pas`) allow your[Lazarus](http://lazarus-ide.org/) LCL application to send any request to pupil and to react to pupil replies. Also you can subscribe to pupil notifications and messages and define in-app events to them.
 
-TPupilClient was designed to (queue) receive replyes and messages in a thread-safe, event driven, non blocking way. Queues are executed in the TApplication main thread. TApplication is part of all standard [Lazarus](http://lazarus-ide.org/) applications. Standard lazarus applications are cross-platform for desktops and depends on the LCL package and its easy to use (yet complex) `Interfaces` and `Forms` units.
+TPupilClient was designed to (queue) received replies and messages in a thread-safe, event driven, non blocking way. Queues are executed in the TApplication main thread. TApplication is part of all standard [Lazarus](http://lazarus-ide.org/) LCL applications. Standard lazarus applications are cross-platform for desktops.
 
 To create a requester client do:
 
@@ -97,7 +97,7 @@ PupilClient.StartSubscriber;        // blocking is recommended
 PupilClient.StartSubscriber(False); // non blocking
 ```
 
-After starting the subscriber, you must chose to which messages you want to receive. You can do this using filters. You can subscribe to any filter you wish. Many subscription filters are available as constants, they are prefixed with `SUB_*`. For instance, you can subscribe to all notification this way:
+After starting the subscriber, you must choose which messages you want to receive. You can do this using filters. You can subscribe to any filter using strings. Many subscription filters are available as constants, they are prefixed with `SUB_*`. For instance, you can subscribe to all pupil notifications this way:
 
 ```pascal
 
