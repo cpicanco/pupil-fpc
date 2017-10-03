@@ -31,7 +31,7 @@ uses pupil.client;
 {...}
 
 // class instantiation
-PupilClient := TPupilClient.Create(127.0.0.1:50020);
+PupilClient := TPupilClient.Create('127.0.0.1:50020');
 
 // events setup
 
