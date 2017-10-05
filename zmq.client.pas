@@ -47,25 +47,25 @@ type
       read FOnMultipartMessageReceived write FOnMultipartMessageReceived;
   end;
 
-  { TResponseReceivedEvent }
+  { TReplyReceivedEvent }
 
-  TResponseReceivedEvent = procedure(ARequest, AResponse: String) of object;
+  TReplyReceivedEvent = procedure(ARequest, AReply: String) of object;
 
   { TZMQReqThread }
 
   TZMQReqThread = class(TThread)
   private
-    FResponse,
+    FReply,
     FRequest : string;
     FContext : Pointer;
     FRequester : Pointer;
     FRTLEvent: PRTLEvent;
-    FOnResponseReceived: TResponseReceivedEvent;
-    procedure ResponseReceived; inline;
+    FOnReplyReceived: TReplyReceivedEvent;
+    procedure ReplyReceived; inline;
   protected
     procedure Execute; override;
     procedure SendRequest(ARequest : string; Blocking : Boolean = False);
-    property OnResponseReceived: TResponseReceivedEvent read FOnResponseReceived write FOnResponseReceived;
+    property OnReplyReceived: TReplyReceivedEvent read FOnReplyReceived write FOnReplyReceived;
   public
     constructor Create(AHost : string; CreateSuspended: Boolean = True);
     destructor Destroy; override;
@@ -157,7 +157,7 @@ var
   host : PChar;
 begin
   host := PChar('tcp://' + AHost);
-  FResponse := '';
+  FReply := '';
   FRequest := '';
   FreeOnTerminate := True;
   FRTLEvent := RTLEventCreate;
@@ -176,9 +176,9 @@ begin
   inherited Destroy;
 end;
 
-procedure TZMQReqThread.ResponseReceived;
+procedure TZMQReqThread.ReplyReceived;
 begin
-  if Assigned(FOnResponseReceived) then FOnResponseReceived(FRequest, FResponse);
+  if Assigned(FOnReplyReceived) then FOnReplyReceived(FRequest, FReply);
 end;
 
 procedure TZMQReqThread.Execute;
@@ -194,10 +194,10 @@ begin
       SendString(FRequester, ARequest);
 
       // wait for response
-      FResponse := RecvShortString(FRequester);
+      FReply := RecvShortString(FRequester);
 
       // queued in the main thread (TApplication)
-      Queue(@ResponseReceived); // returns immediately
+      Queue(@ReplyReceived); // returns immediately
     end;
 end;
 
@@ -207,8 +207,8 @@ begin
   if Blocking then
     begin
       SendString(FRequester, ARequest);
-      FResponse := RecvShortString(FRequester);
-      ResponseReceived;
+      FReply := RecvShortString(FRequester);
+      ReplyReceived;
     end
   else
     RTLeventSetEvent(FRTLEvent);

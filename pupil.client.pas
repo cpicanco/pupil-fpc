@@ -46,20 +46,20 @@ type
       {$ENDIF}
       procedure ReceiveSubPort(AResponse: string);
       procedure ReceivePubPort(AResponse: string);
-      procedure ReceiveResponse(ARequest, AResponse: string);
+      procedure ReceiveReply(ARequest, AReply: string);
       procedure ReceiveMultipartMessage(AMultipartMessage : TMultiPartMessage);
       procedure SubscriberTerminated(Sender : TObject);
     private
       FOnCalibrationStopped: TNotifyMultipartMessage;
       FOnCalibrationSuccessful: TNotifyMultipartMessage;
       FOnRecordingStarted: TNotifyMultipartMessage;
-      FOnRequestReceived : TNotifyRequest;
+      FOnReplyReceived : TNotifyRequest;
       FOnMultipartMessageReceived : TNotifyMultipartMessage;
       procedure SetOnCalibrationStopped(AValue: TNotifyMultipartMessage);
       procedure SetOnCalibrationSuccessful(AValue: TNotifyMultipartMessage);
       procedure SetOnMultiPartMessageReceived(AValue: TNotifyMultipartMessage);
       procedure SetOnRecordingStarted(AValue: TNotifyMultipartMessage);
-      procedure SetOnRequestReceived(AValue: TNotifyRequest);
+      procedure SetOnReplyReceived(AValue: TNotifyRequest);
     public
       constructor Create(AHost : string; CreateSuspended: Boolean = True);
       destructor Destroy; override;
@@ -71,7 +71,7 @@ type
       property OnCalibrationSuccessful : TNotifyMultipartMessage read FOnCalibrationSuccessful write SetOnCalibrationSuccessful;
       property OnCalibrationStopped : TNotifyMultipartMessage read FOnCalibrationStopped write SetOnCalibrationStopped;
       property OnRecordingStarted : TNotifyMultipartMessage read FOnRecordingStarted write SetOnRecordingStarted;
-      property OnRequestReceived : TNotifyRequest read FOnRequestReceived write SetOnRequestReceived;
+      property OnReplyReceived : TNotifyRequest read FOnReplyReceived write SetOnReplyReceived;
       property OnMultiPartMessageReceived : TNotifyMultipartMessage read FOnMultiPartMessageReceived write SetOnMultiPartMessageReceived;
   end;
 
@@ -164,19 +164,19 @@ begin
   FLocalIP := Copy(AHost,1, pos(':', AHost));
   FSubPort := '';
   inherited Create(AHost, CreateSuspended);
-  OnResponseReceived := @ReceiveResponse;
+  OnReplyReceived := @ReceiveReply;
 end;
 
 destructor TPupilClient.Destroy;
 begin
-  OnResponseReceived := nil;
+  OnReplyReceived := nil;
   if Assigned(FZMQSubThread) then FZMQSubThread.Terminate;
   inherited Destroy;
 end;
 
 procedure TPupilClient.Request(AReq: string; Blocking: Boolean);
 begin
-  SendRequest(AReq,Blocking);
+  SendRequest(AReq, Blocking);
 end;
 
 procedure TPupilClient.Subscribe(ASub: string);
@@ -186,7 +186,7 @@ end;
 
 procedure TPupilClient.StartSubscriber(Blocking: Boolean);
 begin
-  Request(REQ_SUB_PORT,Blocking);
+  Request(REQ_SUB_PORT, Blocking);
 end;
 
 procedure TPupilClient.UnSubscribe(ASub: string);
@@ -233,21 +233,21 @@ begin
   { TODO: publish to the pupil ipc backbone }
 end;
 
-procedure TPupilClient.ReceiveResponse(ARequest, AResponse: string);
+procedure TPupilClient.ReceiveResponse(ARequest, AReply: string);
 begin
   {$IFDEF DEBUG}
-  WriteLn('[debug]', #32, ARequest, #32, AResponse);
+  WriteLn('[debug]', #32, ARequest, #32, AReply);
   {$ENDIF}
   case ARequest of
     REQ_SHOULD_START_RECORDING, REQ_SHOULD_STOP_RECORDING,
     REQ_SHOULD_START_CALIBRATION, REQ_SHOULD_STOP_CALIBRATION,
-    REQ_TIMESTAMP : if Assigned(OnRequestReceived) then OnRequestReceived(Self, ARequest, AResponse);
-    REQ_SUB_PORT : ReceiveSubPort(AResponse);
-    REQ_PUB_PORT : ReceivePubPort(AResponse);
+    REQ_TIMESTAMP : if Assigned(OnReplyReceived) then OnReplyReceived(Self, ARequest, AReply);
+    REQ_SUB_PORT : ReceiveSubPort(AReply);
+    REQ_PUB_PORT : ReceivePubPort(AReply);
     else
-      if Pos(REQ_SYNCHRONIZE_TIME,ARequest) <> 0 then
+      if Pos(REQ_SYNCHRONIZE_TIME, ARequest) <> 0 then
         begin
-          if Assigned(OnRequestReceived) then OnRequestReceived(Self, ARequest, AResponse);
+          if Assigned(OnReplyReceived) then OnReplyReceived(Self, ARequest, AReply);
         end
       else raise Exception.Create( ERROR_UNKNOWN_COMMAND + ARequest + #32 + Self.ClassName );
   end;
@@ -323,10 +323,10 @@ begin
   FOnRecordingStarted := AValue;
 end;
 
-procedure TPupilClient.SetOnRequestReceived(AValue: TNotifyRequest);
+procedure TPupilClient.SetOnReplyReceived(AValue: TNotifyRequest);
 begin
-  if FOnRequestReceived = AValue then Exit;
-  FOnRequestReceived := AValue;
+  if FOnReplyReceived = AValue then Exit;
+  FOnReplyReceived := AValue;
 end;
 
 
