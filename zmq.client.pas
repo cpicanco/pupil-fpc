@@ -47,9 +47,9 @@ type
       read FOnMultipartMessageReceived write FOnMultipartMessageReceived;
   end;
 
-  { TReplyReceivedEvent }
+  { TReceiveReplyEvent }
 
-  TReplyReceivedEvent = procedure(ARequest, AReply: String) of object;
+  TReceiveReplyEvent = procedure(ARequest, AReply: String) of object;
 
   { TZMQReqThread }
 
@@ -60,12 +60,12 @@ type
     FContext : Pointer;
     FRequester : Pointer;
     FRTLEvent: PRTLEvent;
-    FOnReplyReceived: TReplyReceivedEvent;
-    procedure ReplyReceived; inline;
+    FOnReceiveReply: TReceiveReplyEvent;
+    procedure ReceiveReplyEvent; inline;
   protected
     procedure Execute; override;
     procedure SendRequest(ARequest : string; Blocking : Boolean = False);
-    property OnReplyReceived: TReplyReceivedEvent read FOnReplyReceived write FOnReplyReceived;
+    property OnReceiveReply: TReceiveReplyEvent read FOnReceiveReply write FOnReceiveReply;
   public
     constructor Create(AHost : string; CreateSuspended: Boolean = True);
     destructor Destroy; override;
@@ -176,9 +176,9 @@ begin
   inherited Destroy;
 end;
 
-procedure TZMQReqThread.ReplyReceived;
+procedure TZMQReqThread.ReceiveReplyEvent;
 begin
-  if Assigned(FOnReplyReceived) then FOnReplyReceived(FRequest, FReply);
+  if Assigned(FOnReceiveReply) then FOnReceiveReply(FRequest, FReply);
 end;
 
 procedure TZMQReqThread.Execute;
@@ -197,7 +197,7 @@ begin
       FReply := RecvShortString(FRequester);
 
       // queued in the main thread (TApplication)
-      Queue(@ReplyReceived); // returns immediately
+      Queue(@ReceiveReplyEvent); // returns immediately
     end;
 end;
 
@@ -208,7 +208,7 @@ begin
     begin
       SendString(FRequester, ARequest);
       FReply := RecvShortString(FRequester);
-      ReplyReceived;
+      ReceiveReplyEvent;
     end
   else
     RTLeventSetEvent(FRTLEvent);

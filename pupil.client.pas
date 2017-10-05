@@ -30,9 +30,9 @@ type
 
   TNotifyMultipartMessage = procedure(Sender: TObject; AMultiPartMessage : TPupilMessage) of object;
 
-  { TNotifyRequest }
+  { TNotifyReply }
 
-  TNotifyRequest = procedure(Sender: TObject; ARequest, AResponse: String) of object;
+  TNotifyReply = procedure(Sender: TObject; ARequest, AResponse: String) of object;
 
   { TPupilClient }
 
@@ -53,13 +53,13 @@ type
       FOnCalibrationStopped: TNotifyMultipartMessage;
       FOnCalibrationSuccessful: TNotifyMultipartMessage;
       FOnRecordingStarted: TNotifyMultipartMessage;
-      FOnReplyReceived : TNotifyRequest;
+      FOnReplyReceived : TNotifyReply;
       FOnMultipartMessageReceived : TNotifyMultipartMessage;
       procedure SetOnCalibrationStopped(AValue: TNotifyMultipartMessage);
       procedure SetOnCalibrationSuccessful(AValue: TNotifyMultipartMessage);
       procedure SetOnMultiPartMessageReceived(AValue: TNotifyMultipartMessage);
       procedure SetOnRecordingStarted(AValue: TNotifyMultipartMessage);
-      procedure SetOnReplyReceived(AValue: TNotifyRequest);
+      procedure SetOnReplyReceived(AValue: TNotifyReply);
     public
       constructor Create(AHost : string; CreateSuspended: Boolean = True);
       destructor Destroy; override;
@@ -71,7 +71,7 @@ type
       property OnCalibrationSuccessful : TNotifyMultipartMessage read FOnCalibrationSuccessful write SetOnCalibrationSuccessful;
       property OnCalibrationStopped : TNotifyMultipartMessage read FOnCalibrationStopped write SetOnCalibrationStopped;
       property OnRecordingStarted : TNotifyMultipartMessage read FOnRecordingStarted write SetOnRecordingStarted;
-      property OnReplyReceived : TNotifyRequest read FOnReplyReceived write SetOnReplyReceived;
+      property OnReplyReceived : TNotifyReply read FOnReplyReceived write SetOnReplyReceived;
       property OnMultiPartMessageReceived : TNotifyMultipartMessage read FOnMultiPartMessageReceived write SetOnMultiPartMessageReceived;
   end;
 
@@ -164,7 +164,7 @@ begin
   FLocalIP := Copy(AHost,1, pos(':', AHost));
   FSubPort := '';
   inherited Create(AHost, CreateSuspended);
-  OnReplyReceived := @ReceiveReply;
+  OnReceiveReply := @ReceiveReply;
 end;
 
 destructor TPupilClient.Destroy;
@@ -233,7 +233,7 @@ begin
   { TODO: publish to the pupil ipc backbone }
 end;
 
-procedure TPupilClient.ReceiveResponse(ARequest, AReply: string);
+procedure TPupilClient.ReceiveReply(ARequest, AReply: string);
 begin
   {$IFDEF DEBUG}
   WriteLn('[debug]', #32, ARequest, #32, AReply);
@@ -323,7 +323,7 @@ begin
   FOnRecordingStarted := AValue;
 end;
 
-procedure TPupilClient.SetOnReplyReceived(AValue: TNotifyRequest);
+procedure TPupilClient.SetOnReplyReceived(AValue: TNotifyReply);
 begin
   if FOnReplyReceived = AValue then Exit;
   FOnReplyReceived := AValue;
