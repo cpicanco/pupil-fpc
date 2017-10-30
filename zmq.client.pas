@@ -107,7 +107,11 @@ begin
         end;
 
         // deserialization is done outside
+        {$IFDEF ZMQ_USE_QUEUES}
         Queue(@MultipartMessageReceived);
+        {$ELSE}
+        Synchronize(@MultipartMessageReceived);
+        {$ENDIF}
       finally
         zmq_msg_close(zmq_message);
       end;
@@ -196,8 +200,12 @@ begin
       // wait for response
       FReply := RecvShortString(FRequester);
 
+      {$IFDEF ZMQ_USE_QUEUES}
       // queued in the main thread (TApplication)
       Queue(@ReceiveReplyEvent); // returns immediately
+      {$ELSE}
+      Synchronize(@ReceiveReplyEvent);
+      {$ENDIF}
     end;
 end;
 
