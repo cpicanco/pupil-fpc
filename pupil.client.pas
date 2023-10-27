@@ -136,8 +136,10 @@ const
   NOTIFY_CALIBRATION_STOPPED = SUB_ALL_NOTIFICATIONS + 'calibration.stopped';
   NOTIFY_CALIBRATION_FAILED = SUB_ALL_NOTIFICATIONS + 'calibration.failed';
   NOTIFY_CALIBRATION_SUCCESSFUL = SUB_ALL_NOTIFICATIONS + 'calibration.successful';
-  NOTIFY_SURFACES_EVENT = 'surfaces';
 
+const
+  SUB_SURFACES_EVENT = 'surfaces.';
+  SURFACES_SCREEN = 'surfaces.screen';
   // 'notify.eye_process.stopped';
   // 'notify.eye_process.should_start.0'
   // 'notify.eye_process.should_start.1'
@@ -294,12 +296,12 @@ begin
       NOTIFY_CALIBRATION_FAILED:
         if Assigned(OnCalibrationFailed) then
           OnCalibrationFailed(Self, PupilMessage);
-      NOTIFY_SURFACES_EVENT:
+      SURFACES_SCREEN:
         if Assigned(OnSurfacesEvent) then
           OnSurfacesEvent(Self, PupilMessage);
       else
-      if Assigned(OnMultiPartMessageReceived) then
-        OnMultiPartMessageReceived(Self, PupilMessage);
+        if Assigned(OnMultiPartMessageReceived) then
+          OnMultiPartMessageReceived(Self, PupilMessage);
     end;
 
   finally
