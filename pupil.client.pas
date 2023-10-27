@@ -15,7 +15,7 @@ unit Pupil.Client;
 
 interface
 
-uses SysUtils, ZMQ.Client, SimpleMsgPack;
+uses SysUtils, ZMQ.Client, SimpleMsgPack, session.constants;
 
 type
 
@@ -56,14 +56,16 @@ type
       FOnRecordingStarted: TNotifyMultipartMessage;
       FOnReplyReceived : TNotifyReply;
       FOnMultipartMessageReceived : TNotifyMultipartMessage;
+      FOnSurfacesEvent: TNotifyMultipartMessage;
       procedure SetOnCalibrationFailed(AValue: TNotifyMultipartMessage);
       procedure SetOnCalibrationStopped(AValue: TNotifyMultipartMessage);
       procedure SetOnCalibrationSuccessful(AValue: TNotifyMultipartMessage);
       procedure SetOnMultiPartMessageReceived(AValue: TNotifyMultipartMessage);
       procedure SetOnRecordingStarted(AValue: TNotifyMultipartMessage);
       procedure SetOnReplyReceived(AValue: TNotifyReply);
+      procedure SetOnSurfacesEvent(AValue: TNotifyMultipartMessage);
     public
-      constructor Create(AHost : string; CreateSuspended: Boolean = True);
+      constructor Create(AHost : string = DefaultPupilAddress; CreateSuspended: Boolean = True);
       destructor Destroy; override;
       procedure StartSubscriber(Blocking : Boolean = True);
       procedure Subscribe(ASub : string);
@@ -75,7 +77,9 @@ type
       property OnCalibrationStopped : TNotifyMultipartMessage read FOnCalibrationStopped write SetOnCalibrationStopped;
       property OnRecordingStarted : TNotifyMultipartMessage read FOnRecordingStarted write SetOnRecordingStarted;
       property OnReplyReceived : TNotifyReply read FOnReplyReceived write SetOnReplyReceived;
+      property OnSurfacesEvent : TNotifyMultipartMessage read FOnSurfacesEvent write SetOnSurfacesEvent;
       property OnMultiPartMessageReceived : TNotifyMultipartMessage read FOnMultiPartMessageReceived write SetOnMultiPartMessageReceived;
+
   end;
 
 var
@@ -132,6 +136,7 @@ const
   NOTIFY_CALIBRATION_STOPPED = SUB_ALL_NOTIFICATIONS + 'calibration.stopped';
   NOTIFY_CALIBRATION_FAILED = SUB_ALL_NOTIFICATIONS + 'calibration.failed';
   NOTIFY_CALIBRATION_SUCCESSFUL = SUB_ALL_NOTIFICATIONS + 'calibration.successful';
+  NOTIFY_SURFACES_EVENT = 'surfaces';
 
   // 'notify.eye_process.stopped';
   // 'notify.eye_process.should_start.0'
@@ -278,15 +283,23 @@ begin
     PupilMessage.Payload := Serializer;
     case PupilMessage.Topic of
       NOTIFY_RECORDING_STARTED :
-        if Assigned(OnRecordingStarted) then OnRecordingStarted(Self, PupilMessage);
+        if Assigned(OnRecordingStarted) then
+          OnRecordingStarted(Self, PupilMessage);
       NOTIFY_CALIBRATION_STOPPED :
-        if Assigned(OnCalibrationStopped) then OnCalibrationStopped(Self, PupilMessage);
+        if Assigned(OnCalibrationStopped) then
+          OnCalibrationStopped(Self, PupilMessage);
       NOTIFY_CALIBRATION_SUCCESSFUL :
-        if Assigned(OnCalibrationSuccessful) then OnCalibrationSuccessful(Self, PupilMessage);
+        if Assigned(OnCalibrationSuccessful) then
+          OnCalibrationSuccessful(Self, PupilMessage);
       NOTIFY_CALIBRATION_FAILED:
-        if Assigned(OnCalibrationFailed) then OnCalibrationFailed(Self, PupilMessage);
-    else
-      if Assigned(OnMultiPartMessageReceived) then OnMultiPartMessageReceived(Self, PupilMessage);
+        if Assigned(OnCalibrationFailed) then
+          OnCalibrationFailed(Self, PupilMessage);
+      NOTIFY_SURFACES_EVENT:
+        if Assigned(OnSurfacesEvent) then
+          OnSurfacesEvent(Self, PupilMessage);
+      else
+      if Assigned(OnMultiPartMessageReceived) then
+        OnMultiPartMessageReceived(Self, PupilMessage);
     end;
 
   finally
@@ -338,6 +351,12 @@ procedure TPupilClient.SetOnReplyReceived(AValue: TNotifyReply);
 begin
   if FOnReplyReceived = AValue then Exit;
   FOnReplyReceived := AValue;
+end;
+
+procedure TPupilClient.SetOnSurfacesEvent(AValue: TNotifyMultipartMessage);
+begin
+  if FOnSurfacesEvent = AValue then Exit;
+  FOnSurfacesEvent := AValue;
 end;
 
 
