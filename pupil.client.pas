@@ -255,11 +255,13 @@ begin
     REQ_SUB_PORT : ReceiveSubPort(AReply);
     REQ_PUB_PORT : ReceivePubPort(AReply);
     else
-      if Pos(REQ_SYNCHRONIZE_TIME, ARequest) <> 0 then
-        begin
-          if Assigned(OnReplyReceived) then OnReplyReceived(Self, ARequest, AReply);
-        end
-      else raise Exception.Create( ERROR_UNKNOWN_COMMAND + ARequest + #32 + Self.ClassName );
+      if Pos(REQ_SYNCHRONIZE_TIME, ARequest) <> 0 then begin
+        if Assigned(OnReplyReceived) then
+          OnReplyReceived(Self, ARequest, AReply);
+      end else begin
+        raise Exception.Create(
+          ERROR_UNKNOWN_COMMAND + ARequest + #32 + Self.ClassName );
+      end;
   end;
 end;
 
