@@ -43,6 +43,7 @@ type
     destructor Destroy; override;
     procedure Subscribe(AFilter : string);
     procedure Unsubscribe(AFilter : string);
+    procedure Close;
     property OnMultiPartMessageReceived: TMultiPartMessageReceived
       read FOnMultipartMessageReceived write FOnMultipartMessageReceived;
   end;
@@ -68,6 +69,7 @@ type
     property OnReceiveReply: TReceiveReplyEvent read FOnReceiveReply write FOnReceiveReply;
   public
     constructor Create(AHost : string; CreateSuspended: Boolean = True);
+    procedure Close; virtual;
     destructor Destroy; override;
   end;
 
@@ -79,43 +81,43 @@ uses zmq, zmq.helpers;
 
 procedure TZMQSubThread.MultipartMessageReceived;
 begin
-  if Assigned(FOnMultipartMessageReceived) then FOnMultipartMessageReceived(FMultipartMessage);
+  if Assigned(FOnMultipartMessageReceived) then
+    FOnMultipartMessageReceived(FMultipartMessage);
 end;
 
 procedure TZMQSubThread.Execute;
 var
   zmq_message : zmq_msg_t;
 begin
-  while not Terminated do
-    begin
-      zmq_message := Default(zmq_msg_t);
-      zmq_msg_init(zmq_message);
-      with FMultipartMessage do
-      try
-        // frame 1 is a string
-        zmq_msg_recv(zmq_message, FSubscriber, 0);
-        SetString(MsgTopic, PAnsiChar(zmq_msg_data(zmq_message)), zmq_msg_size(zmq_message));
+  while not Terminated do begin
+    zmq_message := Default(zmq_msg_t);
+    zmq_msg_init(zmq_message);
+    with FMultipartMessage do
+    try
+      // frame 1 is a string
+      zmq_msg_recv(zmq_message, FSubscriber, 0);
+      SetString(MsgTopic, PAnsiChar(zmq_msg_data(zmq_message)), zmq_msg_size(zmq_message));
 
-        // frame 2 is MsgPack serialization
-        if zmq_msg_more(zmq_message) = 1 then
-        begin
-          zmq_msg_close(zmq_message);
-          zmq_msg_init(zmq_message);
-          zmq_msg_recv(zmq_message, FSubscriber, 0);
-          MsgPackage := TMemoryStream.Create;
-          MsgPackage.WriteBuffer(zmq_msg_data(zmq_message)^, zmq_msg_size(zmq_message));
-        end;
-
-        // deserialization is done outside
-        {$IFDEF ZMQ_USE_QUEUES}
-        Queue(@MultipartMessageReceived);
-        {$ELSE}
-        Synchronize(@MultipartMessageReceived);
-        {$ENDIF}
-      finally
+      // frame 2 is MsgPack serialization
+      if zmq_msg_more(zmq_message) = 1 then
+      begin
         zmq_msg_close(zmq_message);
+        zmq_msg_init(zmq_message);
+        zmq_msg_recv(zmq_message, FSubscriber, 0);
+        MsgPackage := TMemoryStream.Create;
+        MsgPackage.WriteBuffer(zmq_msg_data(zmq_message)^, zmq_msg_size(zmq_message));
       end;
+
+      // deserialization is done outside
+      {$IFDEF ZMQ_USE_QUEUES}
+      Queue(@MultipartMessageReceived);
+      {$ELSE}
+      Synchronize(@MultipartMessageReceived);
+      {$ENDIF}
+    finally
+      zmq_msg_close(zmq_message);
     end;
+  end;
 end;
 
 constructor TZMQSubThread.Create(ASubHost: string; CreateSuspended: Boolean);
@@ -133,7 +135,6 @@ end;
 
 destructor TZMQSubThread.Destroy;
 begin
-  zmq_close(FSubscriber);
   zmq_ctx_shutdown(FContext);
   inherited Destroy;
 end;
@@ -154,6 +155,12 @@ begin
     zmq_setsockopt(FSubscriber, ZMQ_UNSUBSCRIBE, @AFilter[1], Length(AFilter));
 end;
 
+procedure TZMQSubThread.Close;
+begin
+  zmq_close(FSubscriber);
+  Terminate;
+end;
+
 { TZMQReqThread }
 
 constructor TZMQReqThread.Create(AHost: string; CreateSuspended: Boolean);
@@ -172,11 +179,18 @@ begin
   inherited Create(CreateSuspended);
 end;
 
+procedure TZMQReqThread.Close;
+begin
+  FRequest := 'Terminate';
+  RTLEventSetEvent(FRTLEvent);
+  RTLEventDestroy(FRTLEvent);
+  Terminate;
+end;
+
 destructor TZMQReqThread.Destroy;
 begin
   zmq_close(FRequester);
   zmq_ctx_shutdown(FContext);
-  RTLEventDestroy(FRTLEvent);
   inherited Destroy;
 end;
 
@@ -189,37 +203,36 @@ procedure TZMQReqThread.Execute;
 var
   ARequest: string;
 begin
-  while not Terminated do
-    begin
-      RTLeventWaitFor(FRTLEvent);
+  while not Terminated do begin
+    RTLeventWaitFor(FRTLEvent);
 
-      // make a local copy to synchronize shared variables
-      ARequest := FRequest;
-      SendString(FRequester, ARequest);
+    // make a local copy to synchronize shared variables
+    ARequest := FRequest;
+    if ARequest = 'Terminate' then Exit;
+    SendString(FRequester, ARequest);
 
-      // wait for response
-      FReply := RecvShortString(FRequester);
+    // wait for response
+    FReply := RecvShortString(FRequester);
 
-      {$IFDEF ZMQ_USE_QUEUES}
-      // queued in the main thread (TApplication)
-      Queue(@ReceiveReplyEvent); // returns immediately
-      {$ELSE}
-      Synchronize(@ReceiveReplyEvent);
-      {$ENDIF}
-    end;
+    {$IFDEF ZMQ_USE_QUEUES}
+    // queued in the main thread (TApplication)
+    Queue(@ReceiveReplyEvent); // returns immediately
+    {$ELSE}
+    Synchronize(@ReceiveReplyEvent);
+    {$ENDIF}
+  end;
 end;
 
 procedure TZMQReqThread.SendRequest(ARequest: string; Blocking: Boolean);
 begin
   FRequest := ARequest;
-  if Blocking then
-    begin
-      SendString(FRequester, ARequest);
-      FReply := RecvShortString(FRequester);
-      ReceiveReplyEvent;
-    end
-  else
+  if Blocking then begin
+    SendString(FRequester, ARequest);
+    FReply := RecvShortString(FRequester);
+    ReceiveReplyEvent;
+  end else begin
     RTLeventSetEvent(FRTLEvent);
+  end;
 end;
 
 

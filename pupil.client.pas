@@ -67,6 +67,7 @@ type
     public
       constructor Create(AHost : string = DefaultPupilAddress; CreateSuspended: Boolean = True);
       destructor Destroy; override;
+      procedure Close; override;
       procedure StartSubscriber(Blocking : Boolean = True);
       procedure Subscribe(ASub : string);
       procedure Request(AReq : string; Blocking : Boolean = False);
@@ -173,6 +174,7 @@ constructor TPupilClient.Create(AHost: string; CreateSuspended: Boolean);
 begin
   FLocalIP := Copy(AHost,1, pos(':', AHost));
   FSubPort := '';
+  FreeOnTerminate := True;
   inherited Create(AHost, CreateSuspended);
   OnReceiveReply := @ReceiveReply;
 end;
@@ -180,8 +182,15 @@ end;
 destructor TPupilClient.Destroy;
 begin
   OnReplyReceived := nil;
-  if Assigned(FZMQSubThread) then FZMQSubThread.Terminate;
+  if Assigned(FZMQSubThread) then begin
+    FZMQSubThread.Close;
+  end;
   inherited Destroy;
+end;
+
+procedure TPupilClient.Close;
+begin
+  inherited Close;
 end;
 
 procedure TPupilClient.Request(AReq: string; Blocking: Boolean);
@@ -314,7 +323,7 @@ end;
 
 procedure TPupilClient.SubscriberTerminated(Sender: TObject);
 begin
-  FSubPort := '';
+  //FSubPort := '';
 end;
 
 procedure TPupilClient.SetOnMultiPartMessageReceived(
