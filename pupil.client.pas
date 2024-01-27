@@ -15,149 +15,64 @@ unit Pupil.Client;
 
 interface
 
-uses SysUtils, ZMQ.Client, SimpleMsgPack, session.constants;
+uses
+  Classes, SysUtils, SimpleMsgPack, ZMQ.Client, Pupil.Types,
+  session.constants;
 
 type
-
-  { TPupilMessage }
-
-  TPupilMessage = record
-    Topic : string;
-    Payload : TSimpleMsgPack;
-  end;
-
-  { TNotifyMultipartMessage }
-
-  TNotifyMultipartMessage = procedure(Sender: TObject; AMultiPartMessage : TPupilMessage) of object;
-
-  { TNotifyReply }
-
-  TNotifyReply = procedure(Sender: TObject; ARequest, AResponse: String) of object;
 
   { TPupilClient }
 
   TPupilClient = class(TZMQReqThread)
     private
+      FSerializer : TSimpleMsgPack;
       FSubPort : string;
       FLocalIP : string;
       FZMQSubThread : TZMQSubThread;
+      FOnReceiveReply : TNotifyReply;
       {$IFDEF DEBUG}
       procedure DumpDictionary(DecodedMessagePackage : TSimpleMsgPack);
       {$ENDIF}
       procedure ReceiveSubPort(AResponse: string);
       procedure ReceivePubPort(AResponse: string);
-      procedure ReceiveReply(ARequest, AReply: string);
-      procedure ReceiveMultipartMessage(AMultipartMessage : TMultiPartMessage);
+      procedure ReceiveReply(Sender: TObject; ARequest, AReply: string);
       procedure SubscriberTerminated(Sender : TObject);
+      procedure Subscribe(ASub : string);
+      procedure UnSubscribe(ASub : string);
     private
-      FOnCalibrationFailed: TNotifyMultipartMessage;
-      FOnCalibrationStopped: TNotifyMultipartMessage;
-      FOnCalibrationSuccessful: TNotifyMultipartMessage;
-      FOnRecordingStarted: TNotifyMultipartMessage;
-      FOnReplyReceived : TNotifyReply;
-      FOnMultipartMessageReceived : TNotifyMultipartMessage;
-      FOnSurfacesEvent: TNotifyMultipartMessage;
-      procedure SetOnCalibrationFailed(AValue: TNotifyMultipartMessage);
-      procedure SetOnCalibrationStopped(AValue: TNotifyMultipartMessage);
-      procedure SetOnCalibrationSuccessful(AValue: TNotifyMultipartMessage);
-      procedure SetOnMultiPartMessageReceived(AValue: TNotifyMultipartMessage);
-      procedure SetOnRecordingStarted(AValue: TNotifyMultipartMessage);
-      procedure SetOnReplyReceived(AValue: TNotifyReply);
-      procedure SetOnSurfacesEvent(AValue: TNotifyMultipartMessage);
+      function GetOnCalibrationFailed: TNotifyEvent;
+      function GetOnCalibrationStopped: TNotifyEvent;
+      function GetOnCalibrationSuccessful: TNotifyEvent;
+      function GetOnGazeOnSurface: TGazeOnSurfaceEvent;
+      function GetOnRecordingStarted: TNotifyEvent;
+      procedure SetOnCalibrationFailed(AValue: TNotifyEvent);
+      procedure SetOnCalibrationStopped(AValue: TNotifyEvent);
+      procedure SetOnCalibrationSuccessful(AValue: TNotifyEvent);
+      procedure SetOnGazeOnSurface(AValue: TGazeOnSurfaceEvent);
+      procedure SetOnRecordingStarted(AValue: TNotifyEvent);
     public
       constructor Create(AHost : string = DefaultPupilAddress; CreateSuspended: Boolean = True);
       destructor Destroy; override;
       procedure Close; override;
       procedure StartSubscriber(Blocking : Boolean = True);
-      procedure Subscribe(ASub : string);
       procedure Request(AReq : string; Blocking : Boolean = False);
-      procedure UnSubscribe(ASub : string);
     public
-      property OnCalibrationFailed : TNotifyMultipartMessage read FOnCalibrationFailed write SetOnCalibrationFailed;
-      property OnCalibrationSuccessful : TNotifyMultipartMessage read FOnCalibrationSuccessful write SetOnCalibrationSuccessful;
-      property OnCalibrationStopped : TNotifyMultipartMessage read FOnCalibrationStopped write SetOnCalibrationStopped;
-      property OnRecordingStarted : TNotifyMultipartMessage read FOnRecordingStarted write SetOnRecordingStarted;
-      property OnReplyReceived : TNotifyReply read FOnReplyReceived write SetOnReplyReceived;
-      property OnSurfacesEvent : TNotifyMultipartMessage read FOnSurfacesEvent write SetOnSurfacesEvent;
-      property OnMultiPartMessageReceived : TNotifyMultipartMessage read FOnMultiPartMessageReceived write SetOnMultiPartMessageReceived;
-
+      property OnCalibrationFailed : TNotifyEvent
+        read GetOnCalibrationFailed write SetOnCalibrationFailed;
+      property OnCalibrationSuccessful : TNotifyEvent
+        read GetOnCalibrationSuccessful write SetOnCalibrationSuccessful;
+      property OnCalibrationStopped : TNotifyEvent
+        read GetOnCalibrationStopped write SetOnCalibrationStopped;
+      property OnRecordingStarted : TNotifyEvent
+        read GetOnRecordingStarted write SetOnRecordingStarted;
+      property OnReplyReceived : TNotifyReply
+        read FOnReceiveReply write FOnReceiveReply;
+      property OnGazeOnSurface : TGazeOnSurfaceEvent
+        read GetOnGazeOnSurface write SetOnGazeOnSurface;
   end;
 
 var
   PupilClient : TPupilClient;
-
-const
-  // start recording with auto generated session name
-  // note: may append a string to session name, 'R [session name]'
-  REQ_SHOULD_START_RECORDING  = 'R';
-
-  // stop recording
-  REQ_SHOULD_STOP_RECORDING = 'r';
-
-  // start currently selected calibration
-  REQ_SHOULD_START_CALIBRATION = 'C';
-
-  // stop currently selected calibration
-  REQ_SHOULD_STOP_CALIBRATION = 'c';
-
-  // '[T][#32][time]' make pupil timestamps count from [time] on.
-  REQ_SYNCHRONIZE_TIME = 'T';
-
-  // get pupil capture timestamp returns a float as string.
-  REQ_TIMESTAMP = 't';
-
-  // request recording path
-  REQ_RECORDING_PATH = 'P';
-
-const
-  SUB_GAZE_DATA = 'gaze';
-  SUB_EYE_CAMERA_0 = 'pupil.0';
-  SUB_EYE_CAMERA_1 = 'pupil.1';
-
-  SUB_ALL_LOGGING = 'logging.';
-  SUB_LOGGING_INFO = SUB_ALL_LOGGING + 'info';
-  SUB_LOGGING_ERROR = SUB_ALL_LOGGING + 'error';
-  SUB_LOGGING_WARNING = SUB_ALL_LOGGING + 'warning';
-
-  SUB_TIME_SYNC = 'time_sync.';
-
-  SUB_ALL_GROUPS = 'groups.';
-
-const
-  SUB_ALL_NOTIFICATIONS = 'notify.';
-
-  NOTIFY_RECORDING_SHOULD_START = SUB_ALL_NOTIFICATIONS + 'recording.should_start';
-  NOTIFY_RECORDING_SHOULD_STOP = SUB_ALL_NOTIFICATIONS + 'recording.should_stop';
-  NOTIFY_RECORDING_STARTED = SUB_ALL_NOTIFICATIONS + 'recording.started';
-  NOTIFY_RECORDING_STOPPED = SUB_ALL_NOTIFICATIONS + 'recording.stopped';
-
-  NOTIFY_CALIBRATION_SHOULD_START = SUB_ALL_NOTIFICATIONS + 'calibration.should_start';
-  NOTIFY_CALIBRATION_SHOULD_STOP = SUB_ALL_NOTIFICATIONS + 'calibration.should_stop';
-  NOTIFY_CALIBRATION_STARTED = SUB_ALL_NOTIFICATIONS + 'calibration.started';
-  NOTIFY_CALIBRATION_STOPPED = SUB_ALL_NOTIFICATIONS + 'calibration.stopped';
-  NOTIFY_CALIBRATION_FAILED = SUB_ALL_NOTIFICATIONS + 'calibration.failed';
-  NOTIFY_CALIBRATION_SUCCESSFUL = SUB_ALL_NOTIFICATIONS + 'calibration.successful';
-
-const
-  SUB_SURFACES_EVENT = 'surfaces.';
-  SURFACES_SCREEN = 'surfaces.screen';
-  // 'notify.eye_process.stopped';
-  // 'notify.eye_process.should_start.0'
-  // 'notify.eye_process.should_start.1'
-
-const
-  KEY_SUBJECT = 'subject';
-  KEY_RECORDING_PATH = 'rec_path';
-  KEY_SESSION_NAME = 'session_name';
-  KEY_RECORD_EYE = 'record_eye';
-  KEY_COMPRESSION = 'compression';
-
-
-resourcestring
-  ERROR_UNKNOWN_COMMAND = 'Commando Pupil desconhecido:';
-  ERROR_NOT_IMPLEMENTED = 'Commando Pupil não implementado:';
-  //ERROR_UNKNOWN_COMMAND = 'Unknown Pupil command:';
-  //ERROR_NOT_IMPLEMENTED = 'Unimplemented Pupil command:';
 
 implementation
 
@@ -172,6 +87,7 @@ const
 
 constructor TPupilClient.Create(AHost: string; CreateSuspended: Boolean);
 begin
+  FSerializer := TSimpleMsgPack.Create;
   FLocalIP := Copy(AHost,1, pos(':', AHost));
   FSubPort := '';
   FreeOnTerminate := True;
@@ -181,10 +97,10 @@ end;
 
 destructor TPupilClient.Destroy;
 begin
-  OnReplyReceived := nil;
   if Assigned(FZMQSubThread) then begin
     FZMQSubThread.Close;
   end;
+  FSerializer.Free;
   inherited Destroy;
 end;
 
@@ -235,12 +151,10 @@ begin
         WriteLn('[debug]', #32, 'SubHost:', #32, SubHost);
       {$endif};
       FZMQSubThread := TZMQSubThread.Create(SubHost);
-      with FZMQSubThread do
-        begin;
-          OnTerminate := @SubscriberTerminated;
-          OnMultiPartMessageReceived := @ReceiveMultipartMessage;
-          Start;
-        end;
+      with FZMQSubThread do begin
+        OnTerminate := @SubscriberTerminated;
+        Start;
+      end;
       FSubPort := AResponse;
     end;
 end;
@@ -252,7 +166,7 @@ begin
   { TODO: publish to the pupil ipc backbone }
 end;
 
-procedure TPupilClient.ReceiveReply(ARequest, AReply: string);
+procedure TPupilClient.ReceiveReply(Sender: TObject; ARequest, AReply: string);
 begin
   {$IFDEF DEBUG}
   WriteLn('[debug]', #32, ARequest, #32, AReply);
@@ -274,102 +188,104 @@ begin
   end;
 end;
 
-procedure TPupilClient.ReceiveMultipartMessage(AMultipartMessage: TMultiPartMessage);
-var
-  Serializer :  TSimpleMsgPack;
-  PupilMessage : TPupilMessage;
-begin
-  PupilMessage.Topic := AMultipartMessage.MsgTopic;
-  {$ifdef DEBUG}
-    WriteLn('[debug]', #32, PupilMessage.Topic)
-  {$endif};
-
-  AMultipartMessage.MsgPackage.Position := 0;
-  Serializer := TSimpleMsgPack.Create;
-  try
-    Serializer.Clear;
-    Serializer.DecodeFromStream(AMultipartMessage.MsgPackage);
-    {$ifdef DEBUG}
-      WriteLn('[debug]', #32, 'TopicCount:', IntToStr(Serializer.Count));
-      DumpDictionary(Serializer);
-    {$endif};
-    PupilMessage.Payload := Serializer;
-    case PupilMessage.Topic of
-      NOTIFY_RECORDING_STARTED :
-        if Assigned(OnRecordingStarted) then
-          OnRecordingStarted(Self, PupilMessage);
-      NOTIFY_CALIBRATION_STOPPED :
-        if Assigned(OnCalibrationStopped) then
-          OnCalibrationStopped(Self, PupilMessage);
-      NOTIFY_CALIBRATION_SUCCESSFUL :
-        if Assigned(OnCalibrationSuccessful) then
-          OnCalibrationSuccessful(Self, PupilMessage);
-      NOTIFY_CALIBRATION_FAILED:
-        if Assigned(OnCalibrationFailed) then
-          OnCalibrationFailed(Self, PupilMessage);
-      SURFACES_SCREEN:
-        if Assigned(OnSurfacesEvent) then
-          OnSurfacesEvent(Self, PupilMessage);
-      else
-        if Assigned(OnMultiPartMessageReceived) then
-          OnMultiPartMessageReceived(Self, PupilMessage);
-    end;
-
-  finally
-    Serializer.Free;
-    AMultipartMessage.MsgPackage.Free;
-  end;
-end;
-
 procedure TPupilClient.SubscriberTerminated(Sender: TObject);
 begin
   //FSubPort := '';
 end;
 
-procedure TPupilClient.SetOnMultiPartMessageReceived(
-  AValue: TNotifyMultipartMessage);
+function TPupilClient.GetOnCalibrationFailed: TNotifyEvent;
 begin
-  if FOnMultiPartMessageReceived = AValue then Exit;
-  FOnMultiPartMessageReceived := AValue;
+  Result := FZMQSubThread.OnCalibrationFailed;
 end;
 
-procedure TPupilClient.SetOnCalibrationStopped(
-  AValue: TNotifyMultipartMessage);
+function TPupilClient.GetOnCalibrationStopped: TNotifyEvent;
 begin
-  if FOnCalibrationStopped = AValue then Exit;
-  FOnCalibrationStopped := AValue;
+  Result := FZMQSubThread.OnCalibrationStopped;
 end;
 
-procedure TPupilClient.SetOnCalibrationFailed(AValue: TNotifyMultipartMessage);
+function TPupilClient.GetOnCalibrationSuccessful: TNotifyEvent;
 begin
-  if FOnCalibrationFailed=AValue then Exit;
-  FOnCalibrationFailed:=AValue;
+  Result := FZMQSubThread.OnCalibrationSuccessful;
 end;
 
-procedure TPupilClient.SetOnCalibrationSuccessful(
-  AValue: TNotifyMultipartMessage);
+function TPupilClient.GetOnGazeOnSurface: TGazeOnSurfaceEvent;
 begin
-  if FOnCalibrationSuccessful=AValue then Exit;
-  FOnCalibrationSuccessful:=AValue;
+  Result := FZMQSubThread.OnGazeOnSurface;
 end;
 
-procedure TPupilClient.SetOnRecordingStarted(
-  AValue: TNotifyMultipartMessage);
+function TPupilClient.GetOnRecordingStarted: TNotifyEvent;
 begin
-  if FOnRecordingStarted = AValue then Exit;
-  FOnRecordingStarted := AValue;
+  Result := FZMQSubThread.OnRecordingStarted;
 end;
 
-procedure TPupilClient.SetOnReplyReceived(AValue: TNotifyReply);
+procedure TPupilClient.SetOnCalibrationFailed(AValue: TNotifyEvent);
 begin
-  if FOnReplyReceived = AValue then Exit;
-  FOnReplyReceived := AValue;
+  with FZMQSubThread do begin
+    if OnCalibrationFailed = AValue then Exit;
+    OnCalibrationFailed := AValue;
+  end;
+
+  if AValue <> nil then begin
+    Subscribe(NOTIFY_CALIBRATION_FAILED);
+  end else begin
+    UnSubscribe(NOTIFY_CALIBRATION_FAILED);
+  end;
 end;
 
-procedure TPupilClient.SetOnSurfacesEvent(AValue: TNotifyMultipartMessage);
+procedure TPupilClient.SetOnCalibrationStopped(AValue: TNotifyEvent);
 begin
-  if FOnSurfacesEvent = AValue then Exit;
-  FOnSurfacesEvent := AValue;
+  with FZMQSubThread do begin
+    if OnCalibrationStopped = AValue then Exit;
+    OnCalibrationStopped := AValue;
+  end;
+
+  if AValue <> nil then begin
+    Subscribe(NOTIFY_CALIBRATION_STOPPED);
+  end else begin
+    UnSubscribe(NOTIFY_CALIBRATION_STOPPED);
+  end;
+end;
+
+procedure TPupilClient.SetOnCalibrationSuccessful(AValue: TNotifyEvent);
+begin
+  with FZMQSubThread do begin
+    if OnCalibrationSuccessful = AValue then Exit;
+    OnCalibrationSuccessful := AValue;
+  end;
+
+  if AValue <> nil then begin
+    Subscribe(NOTIFY_CALIBRATION_SUCCESSFUL);
+  end else begin
+    UnSubscribe(NOTIFY_CALIBRATION_SUCCESSFUL);
+  end;
+end;
+
+procedure TPupilClient.SetOnGazeOnSurface(AValue: TGazeOnSurfaceEvent);
+begin
+  with FZMQSubThread do begin
+    if OnGazeOnSurface = AValue then Exit;
+    OnGazeOnSurface := AValue;
+  end;
+
+  if AValue <> nil then begin
+    Subscribe(SUB_SURFACES_EVENT);
+  end else begin
+    UnSubscribe(SUB_SURFACES_EVENT);
+  end;
+end;
+
+procedure TPupilClient.SetOnRecordingStarted(AValue: TNotifyEvent);
+begin
+  with FZMQSubThread do begin
+    if OnRecordingStarted = AValue then Exit;
+    OnRecordingStarted := AValue;
+  end;
+
+  if AValue <> nil then begin
+    Subscribe(NOTIFY_RECORDING_STARTED);
+  end else begin
+    UnSubscribe(NOTIFY_RECORDING_STARTED);
+  end;
 end;
 
 

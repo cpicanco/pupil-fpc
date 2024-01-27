@@ -13,29 +13,30 @@ unit ZMQ.Client;
 
 interface
 
-uses Classes;
+uses SimpleMsgPack, Classes, Pupil.Types;
 
 type
-  { TMultiPartMessage }
-
-  TMultiPartMessage = record
-    MsgPackage : TMemoryStream;
-    MsgTopic : string;
-  end;
-
-  { TMultiPartMessageReceived }
-
-  TMultiPartMessageReceived = procedure(AResponse: TMultiPartMessage) of object;
 
   { TZMQSubThread }
 
   TZMQSubThread = class(TThread)
   private
-    FMultipartMessage : TMultiPartMessage;
+    FGazeEvent : TGazeOnSurface;
+    FPupilPayload : TSimpleMsgPack;
+    FMemoryStream : TMemoryStream;
     FContext : Pointer;
     FSubscriber : Pointer;
-    FOnMultipartMessageReceived: TMultiPartMessageReceived;
-    procedure MultipartMessageReceived;
+    FOnGazeOnSurface: TGazeOnSurfaceEvent;
+    FOnCalibrationFailed: TNotifyEvent;
+    FOnCalibrationStopped: TNotifyEvent;
+    FOnCalibrationSuccessful: TNotifyEvent;
+    FOnRecordingStarted: TNotifyEvent;
+    FCriticalSection : TRTLCriticalSection;
+    procedure GazeOnSurface;
+    procedure CalibrationFailed;
+    procedure CalibrationSuccessful;
+    procedure CalibrationStopped;
+    procedure RecordingStarted;
   protected
     procedure Execute; override;
   public
@@ -44,29 +45,28 @@ type
     procedure Subscribe(AFilter : string);
     procedure Unsubscribe(AFilter : string);
     procedure Close;
-    property OnMultiPartMessageReceived: TMultiPartMessageReceived
-      read FOnMultipartMessageReceived write FOnMultipartMessageReceived;
+    property OnGazeOnSurface : TGazeOnSurfaceEvent read FOnGazeOnSurface write FOnGazeOnSurface;
+    property OnCalibrationFailed : TNotifyEvent read FOnCalibrationFailed write FOnCalibrationFailed;
+    property OnRecordingStarted : TNotifyEvent read FOnRecordingStarted write FOnRecordingStarted;
+    property OnCalibrationStopped : TNotifyEvent read FOnCalibrationStopped write FOnCalibrationStopped;
+    property OnCalibrationSuccessful : TNotifyEvent read FOnCalibrationSuccessful write FOnCalibrationSuccessful;
   end;
-
-  { TReceiveReplyEvent }
-
-  TReceiveReplyEvent = procedure(ARequest, AReply: String) of object;
 
   { TZMQReqThread }
 
   TZMQReqThread = class(TThread)
   private
-    FReply,
+    FReply   : string;
     FRequest : string;
     FContext : Pointer;
     FRequester : Pointer;
     FRTLEvent: PRTLEvent;
-    FOnReceiveReply: TReceiveReplyEvent;
+    FOnReceiveReply: TNotifyReply;
     procedure ReceiveReplyEvent; inline;
   protected
     procedure Execute; override;
     procedure SendRequest(ARequest : string; Blocking : Boolean = False);
-    property OnReceiveReply: TReceiveReplyEvent read FOnReceiveReply write FOnReceiveReply;
+    property OnReceiveReply: TNotifyReply read FOnReceiveReply write FOnReceiveReply;
   public
     constructor Create(AHost : string; CreateSuspended: Boolean = True);
     procedure Close; virtual;
@@ -79,24 +79,67 @@ uses zmq, zmq.helpers;
 
 { TZMQSubThread }
 
-procedure TZMQSubThread.MultipartMessageReceived;
+procedure TZMQSubThread.GazeOnSurface;
+var
+  LEvent: TGazeOnSurface;
 begin
-  if Assigned(FOnMultipartMessageReceived) then
-    FOnMultipartMessageReceived(FMultipartMessage);
+  EnterCriticalSection(FCriticalSection);
+  LEvent := FGazeEvent;
+  LeaveCriticalSection(FCriticalSection);
+  FOnGazeOnSurface(Self, LEvent);
+end;
+
+procedure TZMQSubThread.CalibrationFailed;
+begin
+  FOnCalibrationFailed(Self)
+end;
+
+procedure TZMQSubThread.CalibrationSuccessful;
+begin
+  FOnCalibrationSuccessful(Self)
+end;
+
+procedure TZMQSubThread.CalibrationStopped;
+begin
+  FOnCalibrationStopped(Self)
+end;
+
+procedure TZMQSubThread.RecordingStarted;
+begin
+  FOnRecordingStarted(Self)
 end;
 
 procedure TZMQSubThread.Execute;
 var
   zmq_message : zmq_msg_t;
+  LPupilTopic : string;
+
+  function GetGazeOnSurface(APayload : TSimpleMsgPack) : TGazeOnSurface;
+  var
+    LGazeOnSurface : TSimpleMsgPack;
+    LGaze : TSimpleMsgPack;
+    i : integer;
+  begin
+    with Result do begin
+      Name := APayload.S['name'];
+      WordFrameTimestamp := APayload.D['timestamp'];
+      LGazeOnSurface := APayload.O['gaze_on_surfaces'];
+      SetLength(Gazes, LGazeOnSurface.Count);
+      for i := Low(Gazes) to High(Gazes) do begin
+        LGaze := LGazeOnSurface[i].O['norm_pos'];
+        Gazes[i].X := LGaze[0].AsFloat;
+        Gazes[i].Y := LGaze[1].AsFloat;
+      end;
+    end;
+  end;
 begin
   while not Terminated do begin
     zmq_message := Default(zmq_msg_t);
     zmq_msg_init(zmq_message);
-    with FMultipartMessage do
     try
       // frame 1 is a string
       zmq_msg_recv(zmq_message, FSubscriber, 0);
-      SetString(MsgTopic, PAnsiChar(zmq_msg_data(zmq_message)), zmq_msg_size(zmq_message));
+      SetString(LPupilTopic, PAnsiChar(zmq_msg_data(zmq_message)), zmq_msg_size(zmq_message));
 
       // frame 2 is MsgPack serialization
       if zmq_msg_more(zmq_message) = 1 then
@@ -104,16 +147,44 @@ begin
         zmq_msg_close(zmq_message);
         zmq_msg_init(zmq_message);
         zmq_msg_recv(zmq_message, FSubscriber, 0);
-        MsgPackage := TMemoryStream.Create;
-        MsgPackage.WriteBuffer(zmq_msg_data(zmq_message)^, zmq_msg_size(zmq_message));
+        FMemoryStream.Clear;
+        FPupilPayload.Clear;
+
+        FMemoryStream.WriteBuffer(zmq_msg_data(zmq_message)^, zmq_msg_size(zmq_message));
+        FMemoryStream.Position := 0;
+        FPupilPayload.DecodeFromStream(FMemoryStream);
+        {$ifdef DEBUG}
+          WriteLn('[debug]', #32, 'TopicCount:', IntToStr(FSerializer.Count));
+          DumpDictionary(FSerializer);
+        {$endif};
       end;
 
-      // deserialization is done outside
-      {$IFDEF ZMQ_USE_QUEUES}
-      Queue(@MultipartMessageReceived);
-      {$ELSE}
-      Synchronize(@MultipartMessageReceived);
-      {$ENDIF}
+      case LPupilTopic of
+        NOTIFY_RECORDING_STARTED : begin
+          Queue(@RecordingStarted);
+        end;
+
+        NOTIFY_CALIBRATION_STOPPED : begin
+          Queue(@CalibrationStopped);
+        end;
+
+        NOTIFY_CALIBRATION_SUCCESSFUL : begin
+          Queue(@CalibrationSuccessful);
+        end;
+
+        NOTIFY_CALIBRATION_FAILED : begin
+          Queue(@CalibrationFailed);
+        end;
+
+        SURFACES_SCREEN: begin
+          EnterCriticalSection(FCriticalSection);
+          FGazeEvent := GetGazeOnSurface(FPupilPayload);
+          LeaveCriticalSection(FCriticalSection);
+          Queue(@GazeOnSurface);
+        end;
+      end;
+      //Synchronize(@MultipartMessageReceived);
+
     finally
       zmq_msg_close(zmq_message);
     end;
@@ -124,6 +195,10 @@ constructor TZMQSubThread.Create(ASubHost: string; CreateSuspended: Boolean);
 var
   host : PChar;
 begin
+  InitCriticalSection(FCriticalSection);
+  FPupilPayload := TSimpleMsgPack.Create;
+  FMemoryStream := TMemoryStream.Create;
+
   host := PChar('tcp://' + ASubHost);
   FreeOnTerminate := True;
 
@@ -135,7 +210,10 @@ end;
 
 destructor TZMQSubThread.Destroy;
 begin
+  FPupilPayload.Free;
+  FMemoryStream.Free;
   zmq_ctx_shutdown(FContext);
+  DoneCriticalSection(FCriticalSection);
   inherited Destroy;
 end;
 
@@ -196,7 +274,7 @@ end;
 
 procedure TZMQReqThread.ReceiveReplyEvent;
 begin
-  if Assigned(FOnReceiveReply) then FOnReceiveReply(FRequest, FReply);
+  if Assigned(FOnReceiveReply) then FOnReceiveReply(Self, FRequest, FReply);
 end;
 
 procedure TZMQReqThread.Execute;
