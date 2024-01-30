@@ -106,6 +106,7 @@ end;
 
 procedure TPupilClient.Close;
 begin
+  FZMQSubThread.Close;
   inherited Close;
 end;
 
