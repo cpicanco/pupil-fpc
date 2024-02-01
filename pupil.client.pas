@@ -76,6 +76,8 @@ var
 
 implementation
 
+uses Forms;
+
 const
   // return the current publisher's port of the IPC Backbone
   REQ_PUB_PORT = 'PUB_PORT';
@@ -106,6 +108,7 @@ end;
 
 procedure TPupilClient.Close;
 begin
+  OnGazeOnSurface := nil;
   FZMQSubThread.Close;
   inherited Close;
 end;
@@ -262,16 +265,22 @@ begin
 end;
 
 procedure TPupilClient.SetOnGazeOnSurface(AValue: TGazeOnSurfaceEvent);
+var
+  i: Integer;
 begin
   with FZMQSubThread do begin
     if OnGazeOnSurface = AValue then Exit;
-    OnGazeOnSurface := AValue;
-  end;
-
-  if AValue <> nil then begin
-    Subscribe(SUB_SURFACES_EVENT);
-  end else begin
-    UnSubscribe(SUB_SURFACES_EVENT);
+    if AValue <> nil then begin
+      OnGazeOnSurface := AValue;
+      Subscribe(SUB_SURFACES_EVENT);
+    end else begin
+      UnSubscribe(SUB_SURFACES_EVENT);
+      for i := 0 to 10 do begin
+        Application.ProcessMessages;
+        Sleep(100);
+      end;
+      OnGazeOnSurface := AValue;
+    end;
   end;
 end;
 
