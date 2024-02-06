@@ -4,6 +4,8 @@ unit Pupil.Types;
 
 interface
 
+uses Math;
+
 type
 
     { TNotifyReply }
@@ -11,8 +13,8 @@ type
     TNotifyReply = procedure(Sender: TObject; ARequest, AResponse: String) of object;
 
     TNormalizedGaze = record
-      X : Double;
-      Y : Double;
+      X : Float;
+      Y : Float;
     end;
 
     TNormalizedGazes = array of TNormalizedGaze;
@@ -20,7 +22,7 @@ type
     TGazeOnSurface = record
       Name : string;
       Gazes : TNormalizedGazes;
-      WordFrameTimestamp : Double;
+      WordFrameTimestamp : Float;
     end;
 
     TGazeOnSurfaceEvent = procedure (Sender : TObject; AGazeOnSurface: TGazeOnSurface) of object;
